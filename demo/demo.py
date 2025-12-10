@@ -51,18 +51,34 @@ def run_demo(data_dir, checkpoints_dir, results_dir):
         print("Please train the model first by moving your data to 'data/' and running 'python src/main.py'")
         return
 
+    # 1. Fetch Latest Data
+    print("Auto-updating data...")
+    from src.fetch_data import fetch_all_data
+    from src.sentiment import get_current_sentiment
+    
+    # Optional: You can comment this out if you suspect rate limits or want to use cached data
+    fetch_all_data(str(data_path))
+
+    # Point to the NEW auto-downloaded files
+    pltr_path = data_path / "PLTR_current.csv"
+    ixic_path = data_path / "IXIC_current.csv"
+    
+    if not pltr_path.exists():
+        print("Error: Data download failed.")
+        return
+
     print("Loading resources...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Load Scalers
     feature_scaler = joblib.load(feature_scaler_path)
     
-    # Load Data (process last chunk for demo)
+    # Load Data
     print("Processing latest data...")
     pltr_df, _ = load_ticker(pltr_path)
     nasdaq_df, _ = load_ticker(ixic_path)
 
-    # Feature Engineer (Duplicate logic - in prod this would be in a shared transform function)
+    # Feature Engineer
     pltr_df["Date"] = pd.to_datetime(pltr_df["Date"])
     nasdaq_df["Date"] = pd.to_datetime(nasdaq_df["Date"])
     pltr_df = pltr_df.sort_values("Date").reset_index(drop=True)
@@ -116,24 +132,57 @@ def run_demo(data_dir, checkpoints_dir, results_dir):
 
     pred_ret_val = float(pred_ret.cpu().numpy()[0, 0])
     p_up = float(pred_up.cpu().numpy()[0, 0])
-
+    model_verdict = "UP" if p_up >= 0.5 else "DOWN"
     next_close_pred = last_close * (1.0 + pred_ret_val)
-    direction = "UP" if p_up >= 0.5 else "DOWN"
 
-    print(f"Last Actual Close: ${last_close:.2f}")
-    print(f"Predicted Next Close: ${next_close_pred:.2f}")
-    print(f"Predicted Return: {pred_ret_val*100:.2f}%")
-    print(f"Direction Probability (UP): {p_up*100:.1f}% -> {direction}")
+    # --- 2. Get News Sentiment ---
+    sentiment = get_current_sentiment("PLTR")
+    news_score = sentiment['score']
+    news_verdict = sentiment['verdict']
+
+    # --- 3. Hybrid Fusion Logic ---
+    # Combine Model Prob (0-1) and Sentiment Score (-1 to 1)
+    # Simple Heuristic: If they agree, boost confidence.
+    
+    final_recommendation = "HOLD"
+    
+    if model_verdict == "UP" and news_verdict == "POSITIVE":
+        final_recommendation = "STRONG BUY 🟢"
+    elif model_verdict == "DOWN" and news_verdict == "NEGATIVE":
+        final_recommendation = "STRONG SELL 🔴"
+    elif model_verdict == "UP":
+        final_recommendation = "BUY (Model Bullish, News Neutral/Mixed) 🔵"
+    elif model_verdict == "DOWN":
+        final_recommendation = "SELL (Model Bearish, News Neutral/Mixed) 🟠"
+
+    # Print Report
+    print("\n" + "="*50)
+    print(f"     PALANTIR (PLTR) HYBRID REPORT     ")
+    print("="*50)
+    print(f"Last Close Price:   ${last_close:.2f}")
+    print(f"Predicted Return:   {pred_ret_val*100:.2f}%")
+    print(f"Predicted Price:    ${next_close_pred:.2f}")
+    print("-" * 30)
+    print(f"[MODEL] Technicals: {model_verdict} (Confidence: {p_up*100:.1f}%)")
+    print(f"[NEWS]  Sentiment:  {news_verdict} (Score: {news_score:.2f})")
+    print("  Top Headlines:")
+    for h in sentiment['headlines']:
+        print(f"  - {h}")
+    print("-" * 30)
+    print(f"FINAL VERDICT:      {final_recommendation}")
+    print("="*50 + "\n")
 
     # Plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(last_segment["Date"], last_segment["Close"], label="History (Last 60 Days)")
-    plt.scatter(last_date + pd.Timedelta(days=1), next_close_pred, color="red", label="Prediction", marker="x", s=100)
-    plt.title(f"Palantir Stock Prediction: {direction}")
+    plt.figure(figsize=(12, 7))
+    plt.plot(last_segment["Date"], last_segment["Close"], label="History (Last 60 Days)", color='blue')
+    plt.scatter(last_date + pd.Timedelta(days=1), next_close_pred, color="red", label="Prediction", marker="x", s=150, zorder=5)
+    
+    title_text = f"Pred: ${next_close_pred:.2f} | Model: {model_verdict} | News: {news_verdict}"
+    plt.title(f"Palantir Hybrid Forecast\n{title_text}", fontsize=14)
     plt.xlabel("Date")
     plt.ylabel("Price (USD)")
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, alpha=0.3)
     
     out_file = results_path / "prediction_plot.png"
     plt.savefig(out_file)

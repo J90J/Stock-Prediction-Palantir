@@ -2,6 +2,8 @@ numpy
 pandas
 matplotlib
 seaborn
+yfinance
+vaderSentiment
 torch
 scikit-learn
 joblib
