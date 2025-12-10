@@ -51,7 +51,7 @@ def run_demo(data_dir, checkpoints_dir, results_dir):
         print("Please train the model first by moving your data to 'data/' and running 'python src/main.py'")
         return
 
-    # 1. Fetch Latest Data
+    # Update local data cache
     print("Auto-updating data...")
     from src.fetch_data import fetch_all_data
     from src.sentiment import get_current_sentiment
@@ -135,12 +135,13 @@ def run_demo(data_dir, checkpoints_dir, results_dir):
     model_verdict = "UP" if p_up >= 0.5 else "DOWN"
     next_close_pred = last_close * (1.0 + pred_ret_val)
 
-    # --- 2. Get News Sentiment ---
+    
+    
+    # Get News Sentiment
     sentiment = get_current_sentiment("PLTR")
     news_score = sentiment['score']
     news_verdict = sentiment['verdict']
 
-    # --- 3. Hybrid Fusion Logic ---
     # Combine Model Prob (0-1) and Sentiment Score (-1 to 1)
     # Simple Heuristic: If they agree, boost confidence.
     

@@ -42,9 +42,7 @@ def train(data_dir, output_dir):
     pltr_df, _ = load_ticker(pltr_path)
     nasdaq_df, _ = load_ticker(ixic_path)
 
-    # 2. Feature Engineering
     print("Processing features...")
-    # Sort by date
     pltr_df["Date"] = pd.to_datetime(pltr_df["Date"])
     nasdaq_df["Date"] = pd.to_datetime(nasdaq_df["Date"])
     pltr_df = pltr_df.sort_values("Date").reset_index(drop=True)
@@ -59,12 +57,12 @@ def train(data_dir, output_dir):
         how="inner"
     )
 
-    # Moving averages
+    # Calculate Technical Indicators
     merged["MA_5"]  = merged["Close"].rolling(window=5).mean()
     merged["MA_10"] = merged["Close"].rolling(window=10).mean()
     merged["MA_20"] = merged["Close"].rolling(window=20).mean()
 
-    # Technical Indicators
+
     merged["RSI_14"] = compute_RSI(merged["Close"])
     merged["MACD"], merged["MACD_signal"], merged["MACD_hist"] = compute_MACD(merged["Close"])
     merged["BB_width"] = compute_bollinger_width(merged["Close"])
@@ -72,11 +70,10 @@ def train(data_dir, output_dir):
     merged["ATR_14"]   = compute_ATR(merged)
     merged["Stoch_K"]  = compute_stochastic_k(merged)
 
-    # Market factors
+    # Add market context (NASDAQ correlations)
     merged["NAS_ret_1"] = merged["NAS_Close"].pct_change(1)
     merged["NAS_ret_5"] = merged["NAS_Close"].pct_change(5)
 
-    # Drop NaN
     merged = merged.dropna().reset_index(drop=True)
 
     # Feature columns

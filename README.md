@@ -1,9 +1,14 @@
 # Palantir Stock Prediction with LSTM
 
-## Project Overview
-This project uses a Long Short-Term Memory (LSTM) neural network to predict the next-day closing price of Palantir (PLTR) stock. It leverages historical price data and technical indicators (RSI, MACD, Bollinger Bands, etc.) along with market context from the NASDAQ index.
+## Introduction
+For my final project, I explored whether a "Hybrid" approach—combining traditional Deep Learning with modern Sentiment Analysis—could better predict Palantir's (PLTR) stock price. Palantir is often driven by retail interactions and news cycles as much as technical fundamentals, so verifying standard technicals against news sentiment felt like a necessary step for accurate prediction.
 
-The project is structured for reproducibility and ease of use, separating data processing, model definition, training, and inference.
+My system uses an LSTM neural network to analyze 60 days of price/volume history to determine the technical trend, and then cross-references that with real-time news sentiment (analyzed via VADER) to generate a final trading recommendation.
+
+## Challenges & Design Decisions
+One of the biggest hurdles was data availability. While basic price data is free, obtaining historical news data for training is prohibitively expensive.
+*   **Hybrid Inference**: Since I couldn't train the model on years of news history, I opted for a hybrid inference approach. The model predicts the *Technical* direction, and the Sentiment Engine acts as a "filter" or "confirming signal" based on *today's* news.
+*   **Sentiment Granularity**: I chose VADER over transformer-based models (like BERT) because financial headlines are often short and direct, where VADER's rule-based approach performs efficiently without needing a heavy GPU for just text processing.
 
 ## Directory Structure
 ```
