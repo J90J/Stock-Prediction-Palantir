@@ -20,6 +20,11 @@ The project is structured for reproducibility and ease of use, separating data p
 └── results/            # Generated plots and predictions
 ```
 
+## New Key Features
+*   **Automated Data Fetching**: No need to manually download CSVs. The system grabs the latest data from `yfinance`.
+*   **News Sentiment Engine**: Analyzes real-time news headlines to determine market sentiment (Positive/Negative).
+*   **Hybrid "Smart Advisor"**: Combines the LSTM model's technical prediction with news sentiment for a final "Strong Buy/Sell" recommendation.
+
 ## Setup Instructions
 
 1.  **Install Dependencies**:
@@ -27,36 +32,28 @@ The project is structured for reproducibility and ease of use, separating data p
     pip install -r requirements.txt
     ```
 
-2.  **Prepare Data**:
-    *   This project requires two CSV files:
-        *   `PLTR_2025-12-04.csv` (Palantir historical data)
-        *   `IXIC_2025-12-04.csv` (NASDAQ historical data)
-    *   Place these files inside the `data/` directory.
+2.  **Run the Demo**:
+    The demo script handles everything (data downloading + prediction + sentiment analysis).
+    ```bash
+    python demo/demo.py
+    ```
+    This will:
+    *   **Download** the latest Palantir and NASDAQ data automatically.
+    *   **Run Inference** using the trained LSTM model.
+    *   **Analyze News** headlines for sentiment.
+    *   **Generate Report** with a final verdict and plot.
 
-## How to Run
+## Training (Optional)
+If you want to re-train the model yourself:
+1.  Download fresh data:
+    ```bash
+    python src/fetch_data.py
+    ```
+2.  Run the training script:
+    ```bash
+    python src/main.py
+    ```
 
-### 1. Training the Model
-To train the model from scratch:
-```bash
-python src/main.py
-```
-This will:
-*   Load data from `data/`.
-*   Process features and split into train/test sets.
-*   Train the LSTM model for 50 epochs.
-*   Save the trained model (`palantir_lstm.pth`) and scalers to `checkpoints/`.
-
-### 2. Running the Demo
-Once the model is trained (or if you have downloaded pre-trained checkpoints):
-```bash
-python demo/demo.py
-```
-This will:
-*   Load the model and latest data.
-*   Predict the next day's closing price and direction.
-*   Generate a plot in `results/prediction_plot.png`.
-
-## Reproducibility
 *   **Hyperparameters**:
     *   Lookback Window: 60 days
     *   Hidden Size: 64
