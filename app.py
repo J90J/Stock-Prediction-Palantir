@@ -8,16 +8,12 @@ import joblib
 import pathlib
 import sys
 
-# Add project root to path so we can import from src
-sys.path.append(str(pathlib.Path(__file__).parent))
-
-from src.model import PalantirLSTM
-from src.fetch_data import fetch_all_data
-from src.sentiment import get_current_sentiment
-from src.utils import (
-    load_ticker, compute_RSI, compute_MACD, compute_bollinger_width,
-    compute_ROC, compute_ATR, compute_stochastic_k
-)
+# --- Safe Import Setup ---
+try:
+    # Add project root to path so we can import from src
+    sys.path.append(str(pathlib.Path(__file__).parent))
+except Exception as e:
+    st.error(f"System Path Error: {e}")
 
 # Constants
 LOOKBACK = 60
@@ -57,8 +53,12 @@ col1, col2 = st.columns([1, 2])
 with col1:
     if st.button("🔄 Update Market Data"):
         with st.spinner("Downloading latest data from Yahoo Finance..."):
-            fetch_all_data(str(DATA_DIR))
-        st.success("Data updated!")
+            try:
+                from src.fetch_data import fetch_all_data
+                fetch_all_data(str(DATA_DIR))
+                st.success("Data updated!")
+            except Exception as e:
+                st.error(f"Failed to fetch data: {e}")
 
 # 2. Load Resources
 @st.cache_resource
@@ -73,13 +73,21 @@ def load_resources():
     if not model_path.exists():
         return None, None, None, "Model file not found. Please train first."
         
+    try:
+        from src.model import PalantirLSTM
+    except ImportError as e:
+        return None, None, None, f"Import Error (src.model): {e}"
+
     # Load
-    feature_scaler = joblib.load(feature_scaler_path)
-    close_scaler = joblib.load(close_scaler_path)
-    
-    model = PalantirLSTM(len(FEATURE_COLS), HIDDEN_SIZE, NUM_LAYERS).to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
+    try:
+        feature_scaler = joblib.load(feature_scaler_path)
+        close_scaler = joblib.load(close_scaler_path)
+        
+        model = PalantirLSTM(len(FEATURE_COLS), HIDDEN_SIZE, NUM_LAYERS).to(device)
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
+    except Exception as e:
+        return None, None, None, f"Error loading model/scalers: {e}"
     
     return model, feature_scaler, device, None
 
@@ -98,59 +106,77 @@ if not pltr_path.exists():
     st.stop()
 
 # Load Data
-pltr_df, _ = load_ticker(pltr_path)
-nasdaq_df, _ = load_ticker(ixic_path)
+try:
+    from src.utils import (
+        load_ticker, compute_RSI, compute_MACD, compute_bollinger_width,
+        compute_ROC, compute_ATR, compute_stochastic_k
+    )
+    pltr_df, _ = load_ticker(pltr_path)
+    nasdaq_df, _ = load_ticker(ixic_path)
+except Exception as e:
+    st.error(f"Error loading utils or data: {e}")
+    st.stop()
 
 # Preprocessing (Same as demo.py)
-pltr_df["Date"] = pd.to_datetime(pltr_df["Date"])
-nasdaq_df["Date"] = pd.to_datetime(nasdaq_df["Date"])
-pltr_df = pltr_df.sort_values("Date").reset_index(drop=True)
-nasdaq_df = nasdaq_df.sort_values("Date").reset_index(drop=True)
+try:
+    pltr_df["Date"] = pd.to_datetime(pltr_df["Date"])
+    nasdaq_df["Date"] = pd.to_datetime(nasdaq_df["Date"])
+    pltr_df = pltr_df.sort_values("Date").reset_index(drop=True)
+    nasdaq_df = nasdaq_df.sort_values("Date").reset_index(drop=True)
 
-merged = pltr_df.merge(
-    nasdaq_df[["Date", "Close", "Volume"]].rename(columns={"Close": "NAS_Close", "Volume": "NAS_Volume"}),
-    on="Date", how="inner"
-)
+    merged = pltr_df.merge(
+        nasdaq_df[["Date", "Close", "Volume"]].rename(columns={"Close": "NAS_Close", "Volume": "NAS_Volume"}),
+        on="Date", how="inner"
+    )
 
-# Indicators
-merged["MA_5"]  = merged["Close"].rolling(window=5).mean()
-merged["MA_10"] = merged["Close"].rolling(window=10).mean()
-merged["MA_20"] = merged["Close"].rolling(window=20).mean()
-merged["RSI_14"] = compute_RSI(merged["Close"])
-merged["MACD"], merged["MACD_signal"], merged["MACD_hist"] = compute_MACD(merged["Close"])
-merged["BB_width"] = compute_bollinger_width(merged["Close"])
-merged["ROC_10"]   = compute_ROC(merged["Close"])
-merged["ATR_14"]   = compute_ATR(merged)
-merged["Stoch_K"]  = compute_stochastic_k(merged)
-merged["NAS_ret_1"] = merged["NAS_Close"].pct_change(1)
-merged["NAS_ret_5"] = merged["NAS_Close"].pct_change(5)
-merged = merged.dropna().reset_index(drop=True)
+    # Indicators
+    merged["MA_5"]  = merged["Close"].rolling(window=5).mean()
+    merged["MA_10"] = merged["Close"].rolling(window=10).mean()
+    merged["MA_20"] = merged["Close"].rolling(window=20).mean()
+    merged["RSI_14"] = compute_RSI(merged["Close"])
+    merged["MACD"], merged["MACD_signal"], merged["MACD_hist"] = compute_MACD(merged["Close"])
+    merged["BB_width"] = compute_bollinger_width(merged["Close"])
+    merged["ROC_10"]   = compute_ROC(merged["Close"])
+    merged["ATR_14"]   = compute_ATR(merged)
+    merged["Stoch_K"]  = compute_stochastic_k(merged)
+    merged["NAS_ret_1"] = merged["NAS_Close"].pct_change(1)
+    merged["NAS_ret_5"] = merged["NAS_Close"].pct_change(5)
+    merged = merged.dropna().reset_index(drop=True)
 
-# Prepare Input
-last_segment = merged.iloc[-LOOKBACK:]
-last_close = last_segment["Close"].iloc[-1]
-last_date = last_segment["Date"].iloc[-1]
+    # Prepare Input
+    last_segment = merged.iloc[-LOOKBACK:]
+    last_close = last_segment["Close"].iloc[-1]
+    last_date = last_segment["Date"].iloc[-1]
 
-features = last_segment[FEATURE_COLS].values
-features_scaled = feature_scaler.transform(features)
-X_input = torch.tensor(features_scaled, dtype=torch.float32).unsqueeze(0).to(device)
+    features = last_segment[FEATURE_COLS].values
+    features_scaled = feature_scaler.transform(features)
+    X_input = torch.tensor(features_scaled, dtype=torch.float32).unsqueeze(0).to(device)
 
-# Predict
-with torch.no_grad():
-    pred_ret, pred_up = model(X_input)
+    # Predict
+    with torch.no_grad():
+        pred_ret, pred_up = model(X_input)
 
-pred_ret_val = float(pred_ret.cpu().numpy()[0, 0])
-p_up = float(pred_up.cpu().numpy()[0, 0])
-model_verdict = "UP" if p_up >= 0.5 else "DOWN"
-next_close_pred = last_close * (1.0 + pred_ret_val)
+    pred_ret_val = float(pred_ret.cpu().numpy()[0, 0])
+    p_up = float(pred_up.cpu().numpy()[0, 0])
+    model_verdict = "UP" if p_up >= 0.5 else "DOWN"
+    next_close_pred = last_close * (1.0 + pred_ret_val)
+except Exception as e:
+    st.error(f"Prediction Logic Error: {e}")
+    st.stop()
 
 # Sentiment
 st.subheader("📰 News Sentiment Analysis")
 with st.spinner("Analyzing top headlines..."):
-    sentiment = get_current_sentiment("PLTR")
-    
-news_score = sentiment['score']
-news_verdict = sentiment['verdict']
+    try:
+        from src.sentiment import get_current_sentiment
+        sentiment = get_current_sentiment("PLTR")
+        news_score = sentiment['score']
+        news_verdict = sentiment['verdict']
+    except Exception as e:
+        st.error(f"Sentiment Analysis Failed: {e}")
+        news_score = 0
+        news_verdict = "ERROR"
+        sentiment = {"headlines": []}
 
 # Final Logic
 final_recommendation = "HOLD"
